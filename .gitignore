@@ -139,3 +139,7 @@ cython_debug/
 
 # vscode
 .vscode/
+
+# sklearn
+learn_sklearn/
+scikit-learn/
