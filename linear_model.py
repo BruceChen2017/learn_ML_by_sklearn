@@ -4,6 +4,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 import numpy as np
 import matplotlib.pyplot as plt
+import warnings
 
 boston = load_boston()
 # description of dataset
@@ -34,9 +35,9 @@ def _linreg(X, y):
     intercept_ = y.mean() - coef_.dot(X.mean(axis=0))
     return np.append(intercept_, coef_)
 
-reg = LinearRegression()
-reg.fit(X_train, y_train) 
-coef1 = np.append(reg.intercept_, reg.coef_)
+clf = LinearRegression()
+clf.fit(X_train, y_train) 
+coef1 = np.append(clf.intercept_, clf.coef_)
 
 coef2 = _linreg(X_train, y_train)
 print(coef1 - coef2)
@@ -99,7 +100,7 @@ X = rng.randn(n_samples, n_features)
 
 clf = Ridge()
 clf.fit(X, y)
-coef11 = [clf.intercept_, *clf.coef_]
+coef11 = np.append(clf.intercept_, clf.coef_)
 # print(coef11)
 coef12 = _ridge(X, y)
 print(coef11 - coef12)
@@ -113,8 +114,95 @@ X = rng.randn(n_samples, n_features)
 
 clf = Ridge()
 clf.fit(X, y)
-coef21 = [clf.intercept_, *clf.coef_]
+coef21 = np.append(clf.intercept_, clf.coef_)
 # print(coef21)
 coef22 = _ridge(X, y)
 print(coef11 - coef12)
 assert np.allclose(coef11, coef12, atol=1e-10, rtol=0)
+
+
+# LASSO and ElaticNet
+def _sign(x):
+    if x > 0: return 1.0
+    if x == 0: return 0
+    if x < 0: return -1.0
+
+def _elatic_net_cd(X, y, alpha, beta, tol, max_iter):
+    """
+        return coef_
+        references: https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/linear_model/_cd_fast.pyx#L99
+    """
+    if alpha == 0 and beta == 0:
+        warnings.warn("Coordinate descent with no regularization may lead to unexpected results and is discouraged.")
+
+    n, p = X.shape
+    # initial coef
+    coef_ = np.zeros(p)
+    resid = y - X.dot(coef_)
+    z = np.square(X).sum(axis=0)
+
+    for n_iter in range(max_iter):
+        theta_m = np.abs(coef_).max()
+        d_theta_m = 0.0
+        for j in range(p):
+            if z[j] == 0.0:
+                continue
+            theta_j_old = coef_[j] # previous value
+            if theta_j_old != 0:
+                resid += theta_j_old * X[:, j]
+            rho_j = (X[:, j] * resid).sum()
+            # update theta_j
+            theta_j = coef_[j] = _sign(rho_j) * max([abs(rho_j) - alpha, 0]) / (z[j] + beta)
+            # update resid
+            if theta_j != 0:
+                resid -= theta_j * X[:, j]
+            # update the maximum absolute coefficient update
+            d_theta_j = abs(theta_j - theta_j_old)
+            d_theta_m = max(d_theta_m, d_theta_j)
+        # Here, we stop when max(abs(update)) is less than max(abs(coef_before_update)) * tol
+        if d_theta_m < theta_m * tol:
+            break
+    else:
+        warnings.warn("Objective did not converge. You might want to increase the number of iterations.")
+    
+    return coef_
+
+def _elatic_net(X, y, alpha, l1_ratio=0.5, tol=1e-4, max_iter=1000):
+    X = X.copy()
+    y = np.array(y) # copy
+    n, p = X.shape
+    X_mean = X.mean(axis=0)
+    y_mean = y.mean()
+    X = X - X_mean
+    y = y - y_mean
+    l1_reg = alpha * l1_ratio * n
+    l2_reg = alpha * (1 - l1_ratio) * n
+    coef_ = _elatic_net_cd(X, y, l1_reg, l2_reg, tol, max_iter)
+    intercept_ = y_mean - X_mean.dot(coef_)
+    return np.append(intercept_, coef_)
+
+def _lasso(X, y, alpha, tol=1e-4, max_iter=1000):
+    return _elatic_net(X, y, alpha, l1_ratio=1, tol=tol, max_iter=max_iter)
+
+# generate data
+np.random.seed(100)
+X = np.random.randn(100, 5)*2 + 1
+y = 0.5 + 0.1 * X[:, 1] + 0.2 * X[:, 4] + np.random.randn(X.shape[0]) * 2
+
+print("==================LASSO=====================")
+from sklearn.linear_model import Lasso
+clf = Lasso(alpha=0.2)
+clf.fit(X, y)
+coef11 = np.append(clf.intercept_, clf.coef_)
+coef12 = _lasso(X, y, alpha=0.2)
+print(coef11)
+print(coef12)
+
+print("==================ElaticNet=====================")
+from sklearn.linear_model import ElasticNet
+clf = ElasticNet(alpha=0.3)
+clf.fit(X, y)
+coef11 = np.append(clf.intercept_, clf.coef_)
+coef12 = _elatic_net(X, y, alpha=0.3, l1_ratio=0.5)
+print(coef11)
+print(coef12)
