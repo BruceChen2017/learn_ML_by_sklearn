@@ -206,3 +206,129 @@ coef11 = np.append(clf.intercept_, clf.coef_)
 coef12 = _elatic_net(X, y, alpha=0.3, l1_ratio=0.5)
 print(coef11)
 print(coef12)
+
+print("==================Perceptron=====================")
+from sklearn.linear_model import Perceptron
+import numpy as np 
+import warnings
+import matplotlib.pyplot as plt
+plt.style.use("ggplot")
+
+X = np.array(
+    [
+        [2, 4],
+        [3, 8],
+        [-2, 2],
+        [4, 6],
+        [1, 1],
+        [0, -2]
+    ]
+)
+
+y = ['a', 'a', 'b', 'a', 'b', 'b']
+
+clf = Perceptron(shuffle=False, random_state=0)
+clf.fit(X, y)
+coef1 = np.append(clf.coef_, clf.intercept_)
+print(coef1)
+print(clf.n_iter_)
+print(clf.predict([[0, 0]]))
+
+# simple implementation
+# references: https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/linear_model/_sgd_fast.pyx#L337
+class _Hinge:
+    """
+        hinge(y, z; h) = max(0, h - y * z)
+        where z = w.dot(x) + b
+        then d(hinge) / d(z) = -y
+    """
+    def __init__(self, h=1):
+        self.h = h 
+    
+    def loss(self, y, z):
+        z = y * z
+        if z <= self.h:
+            return self.h - z
+        return 0
+    
+    def dloss(self, y, z):
+        z = y * z
+        if z <= self.h:
+            return -y 
+        return 0
+
+class _Perceptron:
+    """
+        only consider linearly separable dataset
+    """
+    def __init__(self, eta=1.0, max_iter=1000):
+        self.eta = eta
+        self.max_iter = 1000
+        self.loss = _Hinge(h=0)
+
+    def fit(self, X, y):
+        X = np.array(X)
+        _y = np.array(y)
+        classes = np.unique(_y)
+        self.classes = classes 
+        n, p = X.shape
+        y = np.ones(n, dtype=int)
+        y[_y == classes[0]] = -1
+        w = np.zeros(p)
+        b = np.zeros(1)
+
+        for epoch in range(self.max_iter):
+            for index in range(n):
+                xi = X[index]
+                yi = y[index]
+                zi = w.dot(xi) + b
+                dloss = self.loss.dloss(yi, zi)
+                if dloss != 0:
+                    # update w and b
+                    w += (-self.eta * dloss * xi)
+                    b += (-self.eta * dloss)
+            z_arr = X.dot(w) + b
+            yhat = np.sign(z_arr)
+            if np.all(yhat == y):
+                break
+
+        if epoch == (self.max_iter - 1):
+            warnings.warn("not converge")
+
+        self.coef_ = w
+        self.intercept_ = b
+        self.n_iter_ = epoch + 1
+            
+    def predict(self, X):
+        """
+            decision function:
+            sign(z := w.dot(x) + b) = +1 if z > 0
+                                    = -1 if z <= 0
+        """
+        X = np.asarray(X)
+        z = X.dot(self.coef_) + self.intercept_
+        return np.where(z > 0, self.classes[1], self.classes[0])
+
+clf = _Perceptron()
+clf.fit(X, y)
+coef2 = np.append(clf.coef_, clf.intercept_)
+print(coef2)
+print(clf.n_iter_)
+print(clf.predict([0, 0]))
+
+# plot
+colors = ['red' if i == 'a' else 'blue' for i in y]
+print(colors)
+plt.scatter(X[:, 0], X[:, 1], c=colors)
+
+if coef2[0] == 0:
+    plt.axvline(-coef2[-1] / coef2[1], c='black')
+else:
+    axis = plt.gca()
+    axis_x = np.array(axis.get_xlim())
+    slope = -coef2[0] / coef2[1]
+    intercept = -coef2[-1] / coef2[1]
+    axis_y = slope * axis_x + intercept
+    plt.plot(axis_x, axis_y, c='black')
+
+plt.show()

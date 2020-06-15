@@ -102,3 +102,39 @@ $$
 
 ### Sklearn implementation  
 In sklearn, lasso fits as a special case of elasticnet with `l1_ratio=1`, and $\alpha$ and $\beta$ are redefined as $(\#)$ above. For stopping rule, sklearn use [duality gap](https://arxiv.org/abs/1505.03410)
+
+## Perceptron  
+### Model
+For linearly separable dataset where $y_i \in \{-1, 1\}$, *Perceptron* aims to find a hyperplane to separate all positive cases and negetive cases at different side.  
+$$
+  \min_{w, b} L(w, b) = \sum_{i=1}^{n} \text{hinge}(y, w^{T}x + b; 0)
+$$
+where
+$$
+  \text{hinge}(y, z; h) = \max(0, h - y*z)
+$$
+then 
+$$
+\begin{aligned}
+  \frac{d \text{ hinge}}{d z} = 
+  \left\{
+  \begin{array}{l}
+  -y  &\text{if } y*z \le h \\
+  0   &\text{Otherwise}
+  \end{array}
+  \right.
+\end{aligned}
+$$
+### Solution
+We solve above problem by stochastic gradient descent(SGD). We can show this algorithm will converge.
+In each epoch, for each misclassified point,
+$$
+\begin{aligned}
+  &\frac{\partial L}{\partial w} = -y_i  x_i \\
+  &\frac{\partial L}{\partial b} = -y_i
+\end{aligned}
+$$
+then we update $w \leftarrow w + \eta y_i x_i$ and $b \leftarrow b + \eta y_i$
+### Sklearn implementation  
+- Before training, transform `y` into `newy` such each element of `newy` is in $\{+1, -1\}$ 
+- use generic sgd scheme with `Perceptron() == SGDClassifier(loss="perceptron", eta0=1, learning_rate="constant", penalty=None)`
